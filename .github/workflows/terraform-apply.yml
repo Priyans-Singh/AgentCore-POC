@@ -1,0 +1,30 @@
+name: terraform-apply
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - env_name: prod
+            env_root: environments/prod/us-west-2
+          - env_name: pre-prod
+            env_root: environments/pre-prod/us-west-2
+    environment: ${{ matrix.env_name }}
+    defaults:
+      run:
+        working-directory: ${{ matrix.env_root }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform init
+        run: terraform init -input=false
+      - name: Terraform validate
+        run: terraform validate
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve

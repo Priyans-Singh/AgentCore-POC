@@ -1,0 +1,5 @@
+quiet: true
+framework:
+  - terraform
+download_external_modules: false
+compact: true
