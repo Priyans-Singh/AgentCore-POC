@@ -3,22 +3,34 @@ name: terraform-apply
 on:
   push:
     branches:
+      - preprod
       - main
 
 jobs:
-  apply:
+  apply-preprod:
+    if: github.ref_name == 'preprod' && vars.ENABLE_TERRAFORM_APPLY == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - env_name: prod
-            env_root: environments/prod/us-west-2
-          - env_name: pre-prod
-            env_root: environments/pre-prod/us-west-2
-    environment: ${{ matrix.env_name }}
+    environment: pre-prod
     defaults:
       run:
-        working-directory: ${{ matrix.env_root }}
+        working-directory: environments/pre-prod/us-west-2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Terraform init
+        run: terraform init -input=false
+      - name: Terraform validate
+        run: terraform validate
+      - name: Terraform apply
+        run: terraform apply -input=false -auto-approve
+
+  apply-prod:
+    if: github.ref_name == 'main' && vars.ENABLE_TERRAFORM_APPLY == 'true'
+    runs-on: ubuntu-latest
+    environment: prod
+    defaults:
+      run:
+        working-directory: environments/prod/us-west-2
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
