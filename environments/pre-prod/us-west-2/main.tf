@@ -83,7 +83,7 @@ module "agentcore_gateway" {
     for k in module.mcp_lambdas.function_keys :
     k => module.mcp_lambdas.function_arns[k]
   }
-  tags            = module.tagging.common_tags
+  tags = module.tagging.common_tags
 }
 
 module "agentcore_memory" {
