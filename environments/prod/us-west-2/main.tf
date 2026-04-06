@@ -95,7 +95,7 @@ module "agentcore_memory" {
   semantic_name              = "semantic"
   semantic_namespaces        = ["agentcore/semantic"]
   summarization_name         = "summarization"
-  summarization_namespaces   = ["agentcore/summarization"]
+  summarization_namespaces   = ["agentcore/{sessionId}/summarization"]
   tags                       = module.tagging.common_tags
 }
 
