@@ -20,7 +20,7 @@ resource "aws_bedrockagentcore_gateway_target" "mcp_lambdas" {
   for_each = var.mcp_lambda_arns
 
   gateway_identifier = aws_bedrockagentcore_gateway.this.gateway_id
-  name               = each.key
+  name               = replace(each.key, "_", "-")
 
   credential_provider_configuration {
     gateway_iam_role {}
@@ -33,7 +33,7 @@ resource "aws_bedrockagentcore_gateway_target" "mcp_lambdas" {
 
         tool_schema {
           inline_payload {
-            name        = each.key
+            name        = replace(each.key, "_", "-")
             description = "MCP tool provided by Lambda function ${each.key}."
 
             input_schema {
