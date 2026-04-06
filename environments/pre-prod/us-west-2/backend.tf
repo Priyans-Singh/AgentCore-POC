@@ -1,7 +1,9 @@
 terraform {
   backend "s3" {
-    bucket = "replace-me-terraform-state-pre-prod"
-    key    = "agentcore/pre-prod/us-west-2/terraform.tfstate"
-    region = "us-west-2"
+    # bucket and region are injected at runtime via -backend-config flags:
+    #   terraform init -backend-config="bucket=$TF_STATE_BUCKET" \
+    #                  -backend-config="region=$AWS_REGION"
+    # Both are set as GitHub Actions environment variables for this env.
+    key = "agentcore/pre-prod/us-west-2/terraform.tfstate"
   }
 }

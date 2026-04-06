@@ -12,6 +12,18 @@ provider "aws" {
   region = var.aws_region
 }
 
+# AgentCore resources enforce different naming regexes per resource type:
+#   - aws_bedrockagentcore_gateway        : ^([0-9a-zA-Z][-]?){1,100}$  (hyphens OK, underscores NOT)
+#   - aws_bedrockagentcore_memory         : ^[a-zA-Z][a-zA-Z0-9_]{0,47}$ (underscores OK, hyphens NOT)
+#   - aws_bedrockagentcore_agent_runtime  : ^[a-zA-Z][a-zA-Z0-9_]{0,47}$ (underscores OK, hyphens NOT)
+# AWS-native resources (IAM, Lambda, Cognito, ECR) accept hyphens freely.
+locals {
+  # For gateway: keep hyphens, strip any underscores
+  ac_gateway_prefix = replace("${var.app_name}-${var.environment}", "_", "-")
+  # For memory and runtime: replace hyphens with underscores
+  ac_safe_prefix = replace("${var.app_name}_${var.environment}", "-", "_")
+}
+
 module "tagging" {
   source      = "../../../modules/tagging"
   app_name    = var.app_name
@@ -33,23 +45,21 @@ module "iam_lambda" {
   tags              = module.tagging.common_tags
 }
 
-module "mcp_lambda" {
-  source            = "../../../modules/mcp-lambda"
-  function_name     = "${var.app_name}-${var.environment}-mcp"
-  role_arn          = module.iam_lambda.role_arn
-  handler           = "index.handler"
-  runtime           = "python3.11"
-  s3_bucket         = var.mcp_lambda_s3_bucket
-  s3_key            = var.mcp_lambda_s3_key
-  s3_object_version = var.mcp_lambda_s3_object_version
-  tags              = module.tagging.common_tags
+# Dynamically creates one Lambda function per subfolder found in lambda_s3_bucket.
+# No function names, S3 keys, or versions need to be specified manually.
+module "mcp_lambdas" {
+  source           = "../../../modules/mcp-lambdas"
+  lambda_s3_bucket = var.lambda_s3_bucket
+  name_prefix      = "${var.app_name}-${var.environment}"
+  role_arn         = module.iam_lambda.role_arn
+  tags             = module.tagging.common_tags
 }
 
 module "iam_gateway" {
-  source         = "../../../modules/iam-gateway"
-  role_name      = "${var.app_name}-${var.environment}-gateway-role"
-  mcp_lambda_arn = module.mcp_lambda.lambda_arn
-  tags           = module.tagging.common_tags
+  source          = "../../../modules/iam-gateway"
+  role_name       = "${var.app_name}-${var.environment}-gateway-role"
+  mcp_lambda_arns = module.mcp_lambdas.function_arn_list
+  tags            = module.tagging.common_tags
 }
 
 module "cognito_jwt_auth" {
@@ -62,28 +72,31 @@ module "cognito_jwt_auth" {
   tags                       = module.tagging.common_tags
 }
 
+# One gateway target is created per discovered Lambda function.
 module "agentcore_gateway" {
   source          = "../../../modules/agentcore-gateway"
-  gateway_name    = "${var.app_name}-${var.environment}-gateway"
+  gateway_name    = "${local.ac_gateway_prefix}-gateway"
   role_arn        = module.iam_gateway.role_arn
   discovery_url   = module.cognito_jwt_auth.discovery_url
   allowed_clients = [module.cognito_jwt_auth.client_id]
-  mcp_lambda_arn  = module.mcp_lambda.lambda_arn
-  target_name     = "mcp-lambda-target"
+  mcp_lambda_arns = {
+    for k in module.mcp_lambdas.function_keys :
+    k => module.mcp_lambdas.function_arns[k]
+  }
   tags            = module.tagging.common_tags
 }
 
 module "agentcore_memory" {
-  source                    = "../../../modules/agentcore-memory"
-  memory_name               = "${var.app_name}-${var.environment}-memory"
-  description               = "AgentCore memory for ${var.app_name} ${var.environment}"
-  user_preference_name      = "user-preference"
+  source                     = "../../../modules/agentcore-memory"
+  memory_name                = "${local.ac_safe_prefix}_memory"
+  description                = "AgentCore memory for ${var.app_name} ${var.environment}"
+  user_preference_name       = "user_preference"
   user_preference_namespaces = ["agentcore/user-preference"]
-  semantic_name             = "semantic"
-  semantic_namespaces       = ["agentcore/semantic"]
-  summarization_name        = "summarization"
-  summarization_namespaces  = ["agentcore/summarization"]
-  tags                      = module.tagging.common_tags
+  semantic_name              = "semantic"
+  semantic_namespaces        = ["agentcore/semantic"]
+  summarization_name         = "summarization"
+  summarization_namespaces   = ["agentcore/summarization"]
+  tags                       = module.tagging.common_tags
 }
 
 module "iam_agent_runtime" {
@@ -94,11 +107,13 @@ module "iam_agent_runtime" {
   tags           = module.tagging.common_tags
 }
 
+# agent_runtime_image_uri is resolved automatically from the ECR data source.
+# Every terraform apply picks up the most recently pushed image — no manual URI updates needed.
 module "agentcore_runtime" {
   source                           = "../../../modules/agentcore-runtime"
-  runtime_name                     = "${var.app_name}-${var.environment}-runtime"
+  runtime_name                     = "${local.ac_safe_prefix}_runtime"
   role_arn                         = module.iam_agent_runtime.role_arn
-  agent_runtime_image_uri          = var.agent_runtime_image_uri
+  agent_runtime_image_uri          = module.ecr.latest_image_uri
   memory_id                        = module.agentcore_memory.memory_id
   gateway_url                      = module.agentcore_gateway.gateway_url
   cognito_token_url                = module.cognito_jwt_auth.token_url
@@ -110,9 +125,5 @@ module "agentcore_runtime" {
   tags                             = module.tagging.common_tags
 }
 
-module "agentcore_runtime_endpoints" {
-  source                            = "../../../modules/agentcore-runtime-endpoints"
-  agent_runtime_id                  = module.agentcore_runtime.runtime_id
-  runtime_endpoint_prod_version     = var.runtime_endpoint_prod_version
-  runtime_endpoint_pre_prod_version = var.runtime_endpoint_pre_prod_version
-}
+# AgentCore automatically creates a DEFAULT endpoint when the runtime is provisioned.
+# No additional endpoint resources are managed here.

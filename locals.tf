@@ -1,3 +1,2 @@
-locals {
-  default_region = "us-west-2"
-}
+# Root-level locals placeholder.
+# Environment-specific locals live in each environments/{env}/{region}/main.tf.

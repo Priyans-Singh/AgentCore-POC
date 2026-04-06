@@ -14,23 +14,13 @@ variable "allowed_clients" {
   type = list(string)
 }
 
-variable "mcp_lambda_arn" {
-  type = string
+# Map of { function_folder_name -> lambda_arn }.
+# One aws_bedrockagentcore_gateway_target is created per entry.
+variable "mcp_lambda_arns" {
+  description = "Map of MCP function name to Lambda ARN. One gateway target is created per entry."
+  type        = map(string)
 }
 
-variable "target_name" {
-  type = string
-}
-variable "tool_schema" {
-  type = object({
-    name        = string
-    description = string
-  })
-  default = {
-    name        = "placeholder_tool"
-    description = "Placeholder MCP tool schema for initial provisioning."
-  }
-}
 variable "tags" {
   type    = map(string)
   default = {}

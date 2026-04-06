@@ -28,7 +28,7 @@ resource "aws_iam_role_policy" "invoke_mcp_lambda" {
       {
         Effect   = "Allow"
         Action   = ["lambda:InvokeFunction"]
-        Resource = [var.mcp_lambda_arn]
+        Resource = var.mcp_lambda_arns
       }
     ]
   })

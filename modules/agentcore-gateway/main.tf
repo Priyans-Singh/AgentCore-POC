@@ -14,9 +14,13 @@ resource "aws_bedrockagentcore_gateway" "this" {
   tags = var.tags
 }
 
-resource "aws_bedrockagentcore_gateway_target" "mcp_lambda" {
+# One gateway target per discovered Lambda function.
+# Target name matches the S3 folder name (= the logical MCP tool name).
+resource "aws_bedrockagentcore_gateway_target" "mcp_lambdas" {
+  for_each = var.mcp_lambda_arns
+
   gateway_identifier = aws_bedrockagentcore_gateway.this.gateway_id
-  name               = var.target_name
+  name               = each.key
 
   credential_provider_configuration {
     gateway_iam_role {}
@@ -25,12 +29,12 @@ resource "aws_bedrockagentcore_gateway_target" "mcp_lambda" {
   target_configuration {
     mcp {
       lambda {
-        lambda_arn = var.mcp_lambda_arn
+        lambda_arn = each.value
 
         tool_schema {
           inline_payload {
-            name        = var.tool_schema.name
-            description = var.tool_schema.description
+            name        = each.key
+            description = "MCP tool provided by Lambda function ${each.key}."
 
             input_schema {
               type = "object"
